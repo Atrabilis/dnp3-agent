@@ -1,0 +1,48 @@
+# Example config for one DNP3 outstation (a recloser controller). Keep site configs (addresses) outside this repository.
+plant: example_plant
+
+devices:
+  - name: "recloser"
+    host: "192.0.2.10"        # documentation address
+    port: 20000
+    outstation: 3             # outstation link address
+    master: 1                 # our link address
+    timeout: 5s               # response timeout
+    poll_interval: 2s         # class 1-3 event poll
+    integrity_interval: 1h    # class 0 (current state) read; "0s" = only at session start
+    heartbeat: 30s
+    telemetry_interval: 60s   # class 0 snapshot for output.postgres_shadow; "0s" = only the session's own class 0 reads
+    # Names stored as the event reference, by binary input index (the outstation's point map).
+    binary_inputs:
+      5: SigOpen
+      6: SigOpenProt
+      7: SigOpenOc1F
+    double_inputs: {}
+    # Telemetry names of analog inputs (value sent x scale, default 1) and counters, by index.
+    analog_inputs:
+      0: {name: Ia}
+      3: {name: Uab}
+      10: {name: F, scale: 0.01}
+    counters:
+      6: CO Total
+
+# Events table; layout and indexes in sql/events.sql of github.com/atrabilis/relay-events. Credentials come from the
+# environment variables named here (loaded from -envPath).
+output:
+  postgres_events:
+    host_env: "PG_HOST"
+    port_env: "PG_PORT"
+    user_env: "PG_USER"
+    password_env: "PG_PASSWORD"
+    database_env: "PG_DATABASE"
+    schema: "edge"
+    table: "recloser_events"
+  # Optional: one row per telemetry snapshot (layout and indexes in sql/postgres_shadow.sql). Omit it to record events only.
+  postgres_shadow:
+    host_env: "PG_HOST"
+    port_env: "PG_PORT"
+    user_env: "PG_USER"
+    password_env: "PG_PASSWORD"
+    database_env: "PG_DATABASE"
+    schema: "edge"
+    table: "recloser_shadow"

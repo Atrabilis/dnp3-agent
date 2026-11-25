@@ -1,0 +1,98 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.0.20-dev or nightly-20260209)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        arch:
+          - amd64
+          - arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # Do not publish binaries from a commit whose tests fail.
+      - name: Test
+        run: go test ./...
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+
+          go build \
+            -trimpath \
+            -ldflags="-s -w -X main.version=${{ inputs.tag || github.ref_name }}" \
+            -o dist/dnp3-agent-linux-${{ matrix.arch }} \
+            ./cmd/dnp3-agent
+
+      - name: Generate sha256
+        run: |
+          cd dist
+          sha256sum dnp3-agent-linux-${{ matrix.arch }} \
+            > dnp3-agent-linux-${{ matrix.arch }}.sha256
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dnp3-agent-linux-${{ matrix.arch }}
+          path: |
+            dist/dnp3-agent-linux-${{ matrix.arch }}
+            dist/dnp3-agent-linux-${{ matrix.arch }}.sha256
+
+  release:
+    name: Create GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+
+      - name: Create tag (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git tag "${{ inputs.tag }}"
+          git push origin "${{ inputs.tag }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/**/dnp3-agent-linux-*
