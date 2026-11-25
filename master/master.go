@@ -113,6 +113,8 @@ type session struct {
 	frags         chan fragment
 	reports       int64
 	snap          *Telemetry // class 0 snapshot being assembled (nil outside a class 0 read)
+
+	loggedRestart, loggedNeedTime bool // IIN bits already logged in this session
 }
 
 type fragment struct {
@@ -314,8 +316,15 @@ func (s *session) handleUnsolicited(apdu []byte) error {
 
 // handle turns one fragment into a report line and confirms it once stored (when the outstation asked for it).
 func (s *session) handle(r dnp3.Response, reason string) error {
-	if r.IIN&dnp3.IINDeviceRestart != 0 {
-		s.o.Logf("dnp3: outstation reports a restart (IIN1.7)")
+	// The restart and need-time bits stay set until a master clears them (a write this agent does not do), so they
+	// are logged once per session, not on every poll.
+	if r.IIN&dnp3.IINDeviceRestart != 0 && !s.loggedRestart {
+		s.loggedRestart = true
+		s.o.Logf("dnp3: outstation reports a restart (IIN1.7); the bit stays set until a master clears it")
+	}
+	if r.IIN&dnp3.IINNeedTime != 0 && !s.loggedNeedTime {
+		s.loggedNeedTime = true
+		s.o.Logf("dnp3: outstation asks for time (IIN1.4): its event time stamps are stored as not synchronized")
 	}
 	ovfl := r.IIN&dnp3.IINEventBufferOverflow != 0
 	if reason == reasonTelemetry || (len(r.Points) == 0 && !ovfl) {

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.1 (2026-11-25)
+
+- The outstation's restart (IIN1.7) and need-time (IIN1.4) indications are logged once per session instead of on
+  every poll (they stay set until a master clears them, which this agent does not do).
+
 ## v0.1.0 (2026-11-25)
 
 - First version: pure Go DNP3 master over TCP (link, transport and application layers).
